@@ -68,8 +68,8 @@ def train(x, y, ctps, lr):
     ps = np.vstack((x, y)).transpose()
     bezier = Bezier(ps, ctps)
 
-    # optimizer = torch.optim.SGD(bezier.parameters(), lr=lr)
-    # start = time.time()
+    optimizer = torch.optim.SGD(bezier.parameters(), lr=lr)
+#     start = time.time()
     # save initial points
     intial_pts = bezier.control_points_f()
     if not lr == 0.0:

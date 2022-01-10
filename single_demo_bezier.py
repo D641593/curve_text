@@ -43,49 +43,45 @@ def cat(tensors, dim=0):
         return tensors[0]
     return torch.cat(tensors, dim)
 
-if __name__ == '__main__':
-    imgfile = 'rename_total_images_train/subimg_6227_hand.jpg'
-    im = Image.open(imgfile)
-    w, h = im.size
+def single_image_bezier(img,control_points,output_size):
+    # if type(img).__module__ == np.__name__:
+    #     img = Image.fromarray(img)
+    h, w = img.shape[:2]
     image_size = (w, h)
-    output_size = (320, 1000)
-
-    input_size = (image_size[0],
-                image_size[1])
-    m = testModel(input_size, output_size, 1)
+    m = testModel(image_size, output_size, 1)
 
     beziers = [[]]
-    im_arrs = []
-    down_scales = []
-    down_scale = get_size(image_size, w, h)
-    down_scales.append(down_scale)
-    if down_scale > 1:
-        im = im.resize((int(w / down_scale), int(h / down_scale)), Image.ANTIALIAS)
-        w, h = im.size
+    im_arrs = [img]
+    # down_scales = []
+    # down_scale = get_size(image_size, w, h)
+    # down_scales.append(down_scale)
+    # if down_scale > 1:
+    #     img = img.resize((int(w / down_scale), int(h / down_scale)), Image.ANTIALIAS)
+    #     w, h = img.size
 
-    padding = (0, 0, image_size[1] - w, image_size[0] - h)
-    im = ImageOps.expand(im, padding)
-    im = im.resize((input_size[1], input_size[0]), Image.ANTIALIAS)
-    im.show()
-    im_arrs.append(np.array(im))
+    # padding = (0, 0, image_size[1] - w, image_size[0] - h)
+    # img = ImageOps.expand(img, padding)
+    # img = img.resize((image_size[1], image_size[0]), Image.ANTIALIAS)
+    # img.show()
+    # im_arrs.append(np.array(img))
 
-    cps = [[4.0,115.0,122.71996808204982,-103.38141266822475,490.4138845002305,2.162317411197261,531.0,226.0,461.0,253.0,374.32406953057955,135.2859313132704,229.83366308391152,99.89611424545215,92.0,152.0]]
-    # cps = [[383.0,556.0,553.1065518592696,440.0130263558785,822.3420395385314,475.7618499943446,934.0,657.0,864.0,723.0,752.1262214272937,628.3219191019219,576.2736508447849,567.9415511648621,447.0,672.0]]
-
-
-    beziers[0].append(cps)
+    beziers[0].append(control_points)
     beziers = [torch.from_numpy(np.stack(b)).float() for b in beziers]
-    beziers = [b / d for b, d in zip(beziers, down_scales)]
+    # beziers = [b / d for b, d in zip(beziers, down_scales)]
     a = beziers[0]
     b = a[0,:,:]
     beziers[0] = b
-    print('::::bezier shape::::', beziers[0].shape)
+    # print('::::bezier shape::::', beziers[0].shape)
 
     im_arrs = np.stack(im_arrs)
     x = torch.from_numpy(im_arrs).permute(0, 3, 1, 2).float()
 
     x = m(x, beziers)
+    imgs = []
     for i, roi in enumerate(x):
         roi = roi.cpu().detach().numpy().transpose(1, 2, 0).astype(np.uint8)
-        im = Image.fromarray(roi, "RGB")
-        im.save('roi_' + str(i).zfill(3) + '.png')
+        img = Image.fromarray(roi, "RGB")
+        imgs.append(img)
+    return imgs
+
+        

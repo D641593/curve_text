@@ -1,6 +1,45 @@
 import cv2
 import numpy as np
+from numpy.core.numeric import full
 from scipy.stats import linregress
+from shapely.geometry import Polygon
+import pyclipper
+import math
+from numpy import array, linalg, matrix
+from scipy.special import comb
+
+Mtk = lambda n, t, k: t**(k)*(1-t)**(n-k)*comb(n,k)
+bezierM = lambda ts: matrix([[Mtk(3,t,k) for k in range(4)] for t in ts])
+
+def bezier_fit(x, y):
+    if len(x) < 4:
+        print('here')
+        return np.array([[x[0],y[0]],[x[0]*2//3 + x[1] // 3,y[0]*2//3 + y[1] // 3],[x[0]//3 + x[1]*2 // 3,y[0]//3 + y[1]*2 // 3],[x[1],y[1]]])
+    dy = y[1:] - y[:-1]
+    dx = x[1:] - x[:-1]
+    dt = (dx ** 2 + dy ** 2)**0.5
+    t = dt/dt.sum()
+    t = np.hstack(([0], t))
+    t = t.cumsum()
+
+    data = np.column_stack((x, y))
+    Pseudoinverse = np.linalg.pinv(bezierM(t)) 
+    control_points = Pseudoinverse.dot(data)
+    return np.asarray(control_points).reshape(-1,2)
+
+def bezier_curve(points, nTimes=1000):
+    nPoints = len(points)
+    xPoints = np.array([p[0] for p in points])
+    yPoints = np.array([p[1] for p in points])
+
+    t = np.linspace(0.0, 1.0, nTimes)
+
+    polynomial_array = np.array([ Mtk(nPoints-1, t, i) for i in range(0, nPoints)])
+
+    xvals = np.dot(xPoints, polynomial_array)
+    yvals = np.dot(yPoints, polynomial_array)
+
+    return xvals, yvals
 
 def findedge(img): 
     edges = [] # 用來記錄所有edge，也是函式輸出
@@ -138,15 +177,74 @@ def get_2_side(contour, side_points):
     return target
 
 
-
-
-
-
-
-
-
-
+def side_detect(contour):
+    contourLength = len(contour)
+    if contourLength < 4:
+        return None
+    idx = list(range(contourLength))
+    der1 = [contour[i]-contour[i-1] for i in idx]
+    der1 = [der1[i]/math.sqrt(der1[i][1]**2 + der1[i][0]**2) for i in idx]
+    der2 = [der1[i+1]-der1[i] for i in idx[:-1]]
+    der2.append(der1[0]-der1[-1])
+    score = [der2[i][0]**2+der2[i][1]**2 for i in idx]
+    score, idx = zip(*sorted(zip(score,idx),reverse=True))
+    pointsIdx = np.array(idx[:4])
     
+    pair = []
+    for i in range(4):
+        pair.append(side_pair(contour,pointsIdx,i))
+    if pair[0][0] != pair[pair[0][1]][1] or pair[1][0] != pair[pair[1][1]][1] or pair[2][0] != pair[pair[2][1]][1] or pair[3][0] != pair[pair[3][1]][1]:
+        return None
+    else:
+        order = pair[0].copy()
+        order.extend([i for i in range(4) if i not in pair[0]])
+        return pointsIdx[order]
 
+def side_pair(contour,pointsIdx,idx):
+    mindis = None
+    side1 = [idx]
+    option = [i for i in range(4) if i != idx]
+    full_distance = count_distance(contour,0,len(contour))
+    for i in option:
+        dis = count_distance(contour,pointsIdx[idx],pointsIdx[i],full_distance=full_distance)
+        if mindis is None or mindis > dis:
+            mindis = dis
+            minIdx = i
+    side1.append(minIdx)
+    return side1
 
+def count_distance(contour,start,end, full_distance=None):
+    contourLength = len(contour)
+    if start > end:
+        tmp = start 
+        start = end
+        end = tmp
+    dis1 = 0
+    dis2 = 0
+    if full_distance is not None:
+        for i in range(start,end):
+            dis1 += math.sqrt((contour[i][0] - contour[i+1][0])**2 + (contour[i][1] - contour[i+1][1])**2)
+        return min(dis1,full_distance-dis1)
+    else:
+        for i in range(0,start):
+            dis1 += math.sqrt((contour[i][0] - contour[(i+1)%contourLength][0])**2 + (contour[i][1] - contour[(i+1)%contourLength][1])**2)
+        for i in range(start,end):
+            dis2 += math.sqrt((contour[i][0] - contour[(i+1)%contourLength][0])**2 + (contour[i][1] - contour[(i+1)%contourLength][1])**2)
+        for i in range(end,contourLength):
+            dis1 += math.sqrt((contour[i][0] - contour[(i+1)%contourLength][0])**2 + (contour[i][1] - contour[(i+1)%contourLength][1])**2)
+        if dis1 == 0:
+            return dis2
+        elif dis2 == 0:
+            return dis1
+        else:
+            return min(dis1,dis2)
+
+def unclip(box, unclip_ratio=1.5):
+    poly = Polygon(box)
+    distance = poly.area * unclip_ratio / poly.length
+    offset = pyclipper.PyclipperOffset()
+    offset.AddPath(box, pyclipper.PT_CLIP, pyclipper.ET_CLOSEDPOLYGON)
+    expanded = np.array(offset.Execute(distance))
+    return expanded
+    
 

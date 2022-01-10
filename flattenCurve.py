@@ -61,4 +61,3 @@ for i, c in enumerate(contour):
     with open('subimg_6227_hand.txt','w',encoding='utf-8') as wf:
         wf.write(','.join(points))
         wf.write(",label")
-pip install opencv-python
